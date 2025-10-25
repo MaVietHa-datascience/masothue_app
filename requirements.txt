@@ -4,3 +4,4 @@ webdriver_manager
 pandas
 openpyxl
 py-proxy
+gunicorn
