@@ -11,6 +11,7 @@
         .form-group { margin-bottom: 1.5em; }
         label { display: block; margin-bottom: 0.5em; font-weight: bold; }
         textarea { width: 100%; padding: 0.8em; border: 1px solid #ccc; border-radius: 4px; min-height: 100px; }
+        input[type="file"] { border: 1px solid #ccc; padding: 0.5em; border-radius: 4px; }
         .btn { padding: 0.8em 1.5em; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }
         .btn-primary { background-color: #007bff; color: white; }
         .btn-secondary { background-color: #6c757d; color: white; }
@@ -26,11 +27,15 @@
 <body>
     <div class="container">
         <h1>MaSoThue.com Multi-Scraper</h1>
-        <p>Enter one or more tax codes, separated by commas.</p>
-        <form method="POST" action="/">
+        <p>Enter tax codes separated by commas, or upload a CSV/Excel file with codes in the first column.</p>
+        <form method="POST" action="/" enctype="multipart/form-data">
             <div class="form-group">
-                <label for="tax_codes">Tax Codes:</label>
-                <textarea id="tax_codes" name="tax_codes" required>{{ tax_codes_input or '' }}</textarea>
+                <label for="tax_codes">Enter Tax Codes:</label>
+                <textarea id="tax_codes" name="tax_codes">{{ tax_codes_input or '' }}</textarea>
+            </div>
+            <div class="form-group">
+                <label for="file">Or Upload File:</label>
+                <input type="file" id="file" name="file" accept=".csv, .xls, .xlsx">
             </div>
             <button type="submit" class="btn btn-primary">Scrape Data</button>
         </form>
