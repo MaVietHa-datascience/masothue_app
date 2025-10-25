@@ -1,79 +1,56 @@
-<!DOCTYPE html>
-<html lang="en">
+<!-- templates/index.html -->
+<!doctype html>
+<html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MaSoThue.com Multi-Scraper</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 2em; background-color: #f8f9fa; color: #333; }
-        .container { max-width: 1200px; margin: 0 auto; background-color: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #0056b3; }
-        .form-group { margin-bottom: 1.5em; }
-        label { display: block; margin-bottom: 0.5em; font-weight: bold; }
-        textarea { width: 100%; padding: 0.8em; border: 1px solid #ccc; border-radius: 4px; min-height: 100px; }
-        input[type="file"] { border: 1px solid #ccc; padding: 0.5em; border-radius: 4px; }
-        .btn { padding: 0.8em 1.5em; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }
-        .btn-primary { background-color: #007bff; color: white; }
-        .btn-secondary { background-color: #6c757d; color: white; }
-        .results { margin-top: 2em; }
-        .download-section { margin-top: 1.5em; text-align: right; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
-        th, td { border: 1px solid #dee2e6; padding: 12px; text-align: left; }
-        th { background-color: #e9ecef; }
-        tr:nth-child(even) { background-color: #f8f9fa; }
-        .error { color: #dc3545; font-weight: bold; }
-    </style>
+  <meta charset="utf-8" />
+  <title>Tax Scraper</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 960px; margin: 24px auto; }
+    textarea { width:100%; height:100px; }
+    table { border-collapse: collapse; width:100%; margin-top: 12px; }
+    table, th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background:#f4f4f4; }
+    .error { color: red; margin-top: 12px; }
+    .meta { color:#666; font-size:0.9em; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>MaSoThue.com Multi-Scraper</h1>
-        <p>Enter tax codes separated by commas, or upload a CSV/Excel file with codes in the first column.</p>
-        <form method="POST" action="/" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="tax_codes">Enter Tax Codes:</label>
-                <textarea id="tax_codes" name="tax_codes">{{ tax_codes_input or '' }}</textarea>
-            </div>
-            <div class="form-group">
-                <label for="file">Or Upload File:</label>
-                <input type="file" id="file" name="file" accept=".csv, .xls, .xlsx">
-            </div>
-            <button type="submit" class="btn btn-primary">Scrape Data</button>
-        </form>
+  <h2>Masothue Scraper (tốc độ trung bình)</h2>
 
-        {% if error %}
-            <div class="results">
-                <p class="error">{{ error }}</p>
-            </div>
-        {% endif %}
+  <form method="post" enctype="multipart/form-data">
+    <label>Nhập mã số thuế (ngăn cách bằng dấu phẩy):</label><br/>
+    <textarea name="tax_codes" placeholder="e.g. 019201007950,0102030405"></textarea><br/><br/>
+    <label>Hoặc upload file (.csv hoặc .xlsx) (các giá trị trong file sẽ được quét):</label><br/>
+    <input type="file" name="file" accept=".csv, .xls, .xlsx"/><br/><br/>
+    <button type="submit">Scrape</button>
+  </form>
 
-        {% if results %}
-            <div class="results">
-                <h2>Scraping Results</h2>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                {% for header in headers %}
-                                    <th>{{ header }}</th>
-                                {% endfor %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in results %}
-                            <tr>
-                                {% for header in headers %}
-                                    <td>{{ row.get(header, '') }}</td>
-                                {% endfor %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="download-section">
-                    <a href="/download_csv" class="btn btn-secondary">Download as CSV</a>
-                </div>
-            </div>
-        {% endif %}
-    </div>
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if results %}
+    <div class="meta">Thời gian: {{ '%.2f'|format(elapsed) }}s — Kết quả: {{ results|length }}</div>
+    <a href="/download_csv">Download CSV</a>
+    <table>
+      <thead>
+        <tr>
+          {% for h in headers %}
+            <th>{{ h }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in results %}
+          <tr>
+            {% for h in headers %}
+              <td>{{ row.get(h, '') }}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
 </body>
 </html>
