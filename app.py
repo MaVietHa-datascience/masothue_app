@@ -6,27 +6,58 @@ import io
 import pandas as pd
 import os
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
-def scrape_tax_code(tax_code):
+
+def scrape_tax_code_with_selenium(tax_code):
     """
-    Scrapes masothue.com for a given tax code and returns the company information.
+    Scrapes masothue.com for a given tax code using Selenium.
     """
-    url = 'https://masothue.com/Search/'
-    params = {'q': tax_code, 'type': 'auto'}
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-    }
-    
+    driver = None
     try:
-        response = requests.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
+        service = Service(ChromeDriverManager().install())
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless=new')  # headless mode mới, ổn định hơn
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--blink-settings=imagesEnabled=false')
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--log-level=3')
+        options.add_argument(
+            'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+        )
+
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(60)
+
+        # --- Perform the scraping ---
+        driver.get('https://masothue.com/')
+        search_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/nav/div/form/div/input'))
+        )
+        search_input.send_keys(tax_code)
+        search_button = driver.find_element(By.XPATH, '/html/body/div[1]/nav/div/form/div/div/button')
+        search_button.click()
+
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CLASS_NAME, 'table-taxinfo'))
+        )
+
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
         table = soup.find('table', class_='table-taxinfo')
-        
+
         if table:
             company_info = {'Tax Code Input': tax_code}
             for row in table.find_all('tr'):
@@ -35,29 +66,32 @@ def scrape_tax_code(tax_code):
                     key = cells[0].get_text(strip=True).replace(':', '').strip()
                     value = cells[1].get_text(strip=True)
                     company_info[key] = value
+            print(f"Successfully scraped data for {tax_code}.")
             return company_info
         else:
             return {'Tax Code Input': tax_code, 'Status': 'Information not found'}
 
-    except requests.exceptions.RequestException as e:
-        return {'Tax Code Input': tax_code, 'Status': f'Request Error: {e}'}
+    except Exception as e:
+        print(f"Error while scraping {tax_code}: {e}")
+        return {'Tax Code Input': tax_code, 'Status': f'Scraping Error: {e}'}
+    finally:
+        if driver:
+            driver.quit()
+
 
 def is_potential_tax_code(value):
-    """
-    Checks if a value is likely a tax code.
-    Allows for 10 digits, or 10 digits followed by a hyphen and 3 digits.
-    """
+    """Checks if a value is likely a tax code."""
     if not isinstance(value, str):
         return False
-    # Regex to match 10 digits OR 10 digits-3 digits format
-    pattern = re.compile(r'^\d{10}(-\d{3})?$')
+    pattern = re.compile(r'^\d{8,15}(-\d{3})?$')
     return bool(pattern.match(value))
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         tax_codes = []
-        
+
         tax_codes_input = request.form['tax_codes']
         if tax_codes_input:
             tax_codes.extend([code.strip() for code in tax_codes_input.split(',') if code.strip()])
@@ -65,13 +99,11 @@ def index():
         file = request.files.get('file')
         if file and file.filename:
             try:
-                # Read all data as strings to preserve leading zeros
                 if file.filename.endswith('.csv'):
                     df = pd.read_csv(file, dtype=str, header=None)
                 else:
                     df = pd.read_excel(file, dtype=str, header=None)
-                
-                # Iterate through all cells in the DataFrame to find potential tax codes
+
                 for col in df.columns:
                     for item in df[col]:
                         if pd.notna(item) and is_potential_tax_code(str(item).strip()):
@@ -85,11 +117,22 @@ def index():
             return render_template('index.html', error="No valid tax codes found in input or file.")
 
         all_results = []
-        for code in tax_codes:
-            info = scrape_tax_code(code)
-            if info:
-                all_results.append(info)
-        
+
+        # --- Run in parallel ---
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_code = {executor.submit(scrape_tax_code_with_selenium, code): code for code in tax_codes}
+
+            for i, future in enumerate(as_completed(future_to_code)):
+                code = future_to_code[future]
+                try:
+                    info = future.result()
+                    if info:
+                        all_results.append(info)
+                    print(f"({i+1}/{len(tax_codes)}) Completed scraping for {code}")
+                except Exception as exc:
+                    print(f"Error processing {code}: {exc}")
+                    all_results.append({'Tax Code Input': code, 'Status': f'Error: {exc}'})
+
         if all_results:
             si = io.StringIO()
             all_headers = set().union(*(d.keys() for d in all_results))
@@ -100,13 +143,14 @@ def index():
             writer = csv.DictWriter(si, fieldnames=ordered_headers)
             writer.writeheader()
             writer.writerows(all_results)
-            
+
             global csv_output
             csv_output = si.getvalue()
 
             return render_template('index.html', results=all_results, headers=ordered_headers, tax_codes_input=', '.join(tax_codes))
 
     return render_template('index.html')
+
 
 @app.route('/download_csv')
 def download_csv():
@@ -116,6 +160,7 @@ def download_csv():
         output.headers["Content-type"] = "text/csv; charset=utf-8-sig"
         return output
     return "No data to download.", 404
+
 
 if __name__ == '__main__':
     csv_output = None

@@ -1,6 +1,6 @@
 Flask
-requests
-beautifulsoup4
+selenium
+webdriver_manager
 pandas
 openpyxl
-gunicorn
+py-proxy
